@@ -1,0 +1,364 @@
+local config_names = { "Global", "Taser", "Heavy Pistol","Pistol", "Auto", "Scout", "AWP", "Rifle", "SMG", "Shotgun", "Desert Eagle" }
+local name_to_num = { ["Global"] = 1, ["Taser"] = 2, ["Heavy Pistol"] = 3, ["Pistol"] = 4, ["Auto"] = 5, ["Scout"] = 6, ["AWP"] = 7, ["Rifle"] = 8, ["SMG"] = 9, ["Shotgun"] = 10,["Desert Eagle"] = 11 }
+local weapon_idx = { 
+    [1] = 11,[2] = 4,[3] = 4,[4] = 4,[7] = 8,[8] = 8,[9] = 7,[10] = 8,[11] = 5,[13] = 8,[14] = 8,[16] = 8,[17] = 9,[19] = 9,[23] = 9,[24] = 9,[25] = 10,[26] = 9,[27] = 10,[28] = 8,[29] = 10,[30] = 4,[31] = 2,  [32] = 4,[33] = 9,[34] = 9,[35] = 10,[36] = 4,[38] = 5,[39] = 8,[40] = 6,[60] = 8,[61] = 4,[63] = 4,[64] = 3}
+local damage_idx  = { [0] = "Auto", [101] = "HP + 1", [102] = "HP + 2", [103] = "HP + 3", [104] = "HP + 4", [105] = "HP + 5", [106] = "HP + 6", [107] = "HP + 7", [108] = "HP + 8", [109] = "HP + 9", [110] = "HP + 10", [111] = "HP + 11", [112] = "HP + 12", [113] = "HP + 13", [114] = "HP + 14", [115] = "HP + 15", [116] = "HP + 16", [117] = "HP + 17", [118] = "HP + 18", [119] = "HP + 19", [120] = "HP + 20", [121] = "HP + 21", [122] = "HP + 22", [123] = "HP + 23", [124] = "HP + 24", [125] = "HP + 25", [126] = "HP + 26" }
+local last_weapon =  0
+local close_ui = false
+
+local debug_ui          = ui.new_multiselect("Rage","Aimbot","Debug - ui","Aimbot","Other")
+local active_wpn        = ui.new_combobox("Rage","Aimbot", "Weapon select", config_names)
+
+local override_dmg_1      = ui.new_hotkey("Rage","Aimbot","Override minimum damage - 1")
+local override_dmg_2      = ui.new_hotkey("Rage","Aimbot","Override minimum damage - 2")
+
+local force_avoid_limbs = ui.new_hotkey("Rage","Aimbot","Force avoid limbs")
+
+local rage = {}
+local active_idx = 1
+
+for i=1, #config_names do
+    rage[i] = {
+        enabled                                                 = ui.new_checkbox("Rage","Aimbot", "Enable config\n"..          config_names[i]),
+        target_selection                                        = ui.new_combobox("Rage","Aimbot", "Target sledction\n"..       config_names[i], {"Cycle", "Cycle (2x)", "Near crosshair", "Highest damage", "Lowest ping", "Best K/D ratio", "Best hit chance"}),
+        target_hitbox                                           = ui.new_multiselect("Rage","Aimbot", "Target hitbox\n"..       config_names[i], { "Head", "Chest", "Stomach", "Arms", "Legs", "Feet" }),
+        avoid_move                                              = ui.new_checkbox("Rage","Aimbot","Avoid limbs while move\n"..  config_names[i]),
+        avoid_jump                                              = ui.new_checkbox("Rage","Aimbot","Avoid limbs while jump\n"..  config_names[i]),
+        multipoint                                              = ui.new_multiselect("Rage","Aimbot", "Multi-point\n"..         config_names[i], { "Head", "Chest", "Stomach", "Arms", "Legs", "Feet" }), 
+        multipoint_mode                                         = ui.new_combobox("Rage","Aimbot", "\nMulti-point mode\n"..     config_names[i], { "Low","Medium","High" }),
+        multipoint_scale                                        = ui.new_slider("Rage","Aimbot", "Multi-point scale\n"..        config_names[i], 24, 100, 60, true, "%", 1, { [24] = "Auto" }),
+        prefer_safe_point                                       = ui.new_checkbox("Rage","Aimbot", "Prefer safe point\n"..      config_names[i]),
+        avoid_unsafe_hitbox                                     = ui.new_multiselect("Rage","Aimbot", "Avoid unsafe hitboxes\n".. config_names[i], { "Head", "Chest", "Stomach", "Arms", "Legs"}), 
+        automatic_scope                                         = ui.new_checkbox("Rage","Aimbot", "Automatic scope\n"..        config_names[i]),
+
+        extend                                                  = ui.new_multiselect("Rage","Aimbot", "Extend selection\n".. config_names[i], {"Minimum hitchance - No scope","Minimum damage - visible","Dormant damage","Override damage - 1","Override damage - 2","No scope quick stop"}),
+        -- hitchance
+        hc_label                                                = ui.new_label("Rage","Aimbot", "-----Minimum hit chance-----\n".. config_names[i]),
+        hitchance                                               = ui.new_slider("Rage","Aimbot", "Scope\n".. config_names[i], 0, 100, 60, true, "%", 1, {"Off"}),
+        hitchance_no_scope                                      = ui.new_slider("Rage","Aimbot", "No scope\n".. config_names[i], 0, 100, 60, true, "%", 1, {"Off"}),
+        -- damage
+        dmg_label                                               = ui.new_label("Rage","Aimbot", "-----Minimum damage-----\n".. config_names[i]),    
+        min_damage                                              = ui.new_slider("Rage","Aimbot", "Default(wall)\n".. config_names[i], 0, 126, 20, true, nil, 1, damage_idx), 
+        min_damage_visible                                      = ui.new_slider("Rage","Aimbot", "Visible\n".. config_names[i], 0, 126, 20, true, nil, 1, damage_idx), 
+        min_damage_dormant                                      = ui.new_slider("Rage","Aimbot", "Dormant\n".. config_names[i], 0, 100, 15, true, nil, 1), 
+        min_damage_override_1                                   = ui.new_slider("Rage","Aimbot", "Override - 1\n".. config_names[i], 0, 126, 20, true, nil, 1, damage_idx),
+        min_damage_override_2                                   = ui.new_slider("Rage","Aimbot", "Override - 2\n".. config_names[i], 0, 126, 20, true, nil, 1, damage_idx),  
+
+        accuracy_boost                                          = ui.new_combobox("Rage","Other", "Accuracy boost\n".. config_names[i], {"Off", "Low", "Medium", "High", "Maximum"}),
+        delay_shot                                              = ui.new_checkbox("Rage","Other", "Delay shot\n".. config_names[i]),
+        quick_stop                                              = ui.new_checkbox("Rage","Other", "Quick stop\n".. config_names[i]),
+        quick_stop_options                                      = ui.new_multiselect("Rage","Other", "Quick stop options\n".. config_names[i], {"Early", "Slow motion", "Duck", "Fake duck","Move between shots", "Ignore molotov"}),
+        noscope_quick_stop_options                              = ui.new_multiselect("Rage","Other", "No scope quick stop options\n".. config_names[i], {"Early", "Slow motion", "Duck", "Fake duck","Move between shots", "Ignore molotov"}),
+        prefer_baim                                             = ui.new_checkbox("Rage","Other", "Prefer body aim\n".. config_names[i]),
+        prefer_baim_disablers                                   = ui.new_multiselect("Rage","Other", "Prefer body aim disablers\n".. config_names[i], {"Low inaccuracy", "Target shot fired", "Target resolved", "Safe point headshot", "Low damage"}),
+        force_baim_peek                                         = ui.new_checkbox("Rage","Other", "Force body aim on peek\n".. config_names[i]),
+        dt_extend                                               = ui.new_multiselect("Rage", "Other","Active DT mode\n".. config_names[i], {"Target sledction","Hitbox","Multi-point","Avoid unsafe hitbox","Minimum hitchance","Minimum damage - default(wall)","Minimum damage - visible","Minimum damage - No nscope","In accuracy","Quick stop","Prefer body baim","Mode","in hitchance","fake lag limit","in quick stop"}),
+    }
+end
+
+local ref_enable, ref_enable_key                                = ui.reference("RAGE", "Aimbot", "Enabled")
+local ref_target                                                = ui.reference("RAGE", "Aimbot", "Target selection")
+local ref_hitbox                                                = ui.reference("RAGE", "Aimbot", "Target hitbox")
+local ref_multipoint, ref_multipointkey, ref_multipoint_mode    = ui.reference("RAGE", "Aimbot", "Multi-point")
+local ref_multipoint_scale                                      = ui.reference("RAGE", "Aimbot", "Multi-point scale")
+local ref_prefer_safepoint                                      = ui.reference("RAGE", "Aimbot", "Prefer safe point")
+local ref_force_safepoint                                       = ui.reference("RAGE", "Aimbot", "Force safe point")
+local ref_avoid_hitbox                                          = ui.reference("Rage", "Aimbot","Avoid unsafe hitboxes")
+local ref_automatic_fire                                        = ui.reference("RAGE", "Aimbot", "Automatic fire")
+local ref_automatic_penetration                                 = ui.reference("RAGE", "Aimbot", "Automatic penetration")
+local ref_silent_aim                                            = ui.reference("RAGE", "Aimbot", "Silent aim")
+local ref_hitchance                                             = ui.reference("RAGE", "Aimbot", "Minimum hit chance")
+local ref_mindamage                                             = ui.reference("RAGE", "Aimbot", "Minimum damage")
+local ref_automatic_scope                                       = ui.reference("RAGE", "Aimbot", "Automatic scope")
+local ref_reduce_aimstep                                        = ui.reference("RAGE", "Aimbot", "Reduce aim step")
+local ref_max_fov                                               = ui.reference("Rage", "Aimbot","Maximum FOV")
+local ref_log_spread                                            = ui.reference("RAGE", "Aimbot", "Log misses due to spread")
+local ref_low_fps_mitigations                                   = ui.reference("RAGE", "Aimbot", "Low FPS mitigations")
+
+local ref_remove_recoil                                         = ui.reference("RAGE", "Other", "Remove recoil")
+local ref_accuracy_boost                                        = ui.reference("RAGE", "Other", "Accuracy boost")
+local ref_delay_shot                                            = ui.reference("RAGE", "Other", "Delay shot")
+local ref_quickstop, ref_quickstopkey                           = ui.reference("RAGE", "Other", "Quick stop")
+local ref_quickstop_options                                     = ui.reference("RAGE", "Other", "Quick stop options")
+local ref_quick_peek , ref_quick_peek_key                       = ui.reference("Rage", "Other","Quick peek assist")
+local ref_quick_peek_color                                      = ui.reference("Rage", "Other","Quick peek assist display")
+local ref_antiaim_correction                                    = ui.reference("RAGE", "Other", "Anti-aim correction")
+local ref_antiaim_correction_override                           = ui.reference("RAGE", "Other", "Anti-aim correction override")
+local ref_prefer_bodyaim                                        = ui.reference("RAGE", "Other", "Prefer body aim")
+local ref_prefer_bodyaim_disablers                              = ui.reference("RAGE", "Other", "Prefer body aim disablers")
+local ref_force_baim_peek                                       = ui.reference("RAGE", "Other", "Force body aim on peek")
+local ref_force_bodyaim                                         = ui.reference("RAGE", "Other", "Force body aim")
+
+local sucess_dormant,ref_dormant_active                         = pcall(ui.reference,"Rage", "Aimbot", "Dormant aimbot")
+
+local sucess_dormant_sli,ref_dormant_damage                     = pcall(ui.reference,"Rage", "Aimbot", "Dormant minimum damage")
+
+if not sucess_dormant or not sucess_dormant_sli then
+    error('\n\n - 滚去论坛订阅 \n - https://gamesense.pub/forums/viewtopic.php?id=27115\n')
+end
+
+local fd_key                                                    = ui.reference("RAGE", "Other", "Duck peek assist")
+local dt, dt_key                                                = ui.reference("RAGE", "Other", "Double tap")
+local dt_mode                                                   = ui.reference("RAGE", "Other", "Double tap mode")
+
+local function contains(table, val)if #table > 0 then for i=1, #table do if table[i] == val then return true end end end return false end
+local function avoid_hitbox()
+    local avoid_list = {}
+    if #ui.get(rage[active_idx].target_hitbox) > 0 then
+        for i = 1 , #ui.get(rage[active_idx].target_hitbox) do
+            if ui.get(rage[active_idx].target_hitbox)[i] == "Head" or ui.get(rage[active_idx].target_hitbox)[i] == "Chest" or ui.get(rage[active_idx].target_hitbox)[i] == "Stomach" then
+                avoid_list[i] = ui.get(rage[active_idx].target_hitbox)[i]
+            end
+        end
+        if #avoid_list == 0 then
+            avoid_list[1] = "Head"
+        end
+    end
+    return avoid_list
+end
+local function get_distance(x1, y1, z1, x2, y2, z2) return math.sqrt((x2-x1)^2 + (y2-y1)^2 + (z2-z1)^2) end
+local function get_closest_player()
+    local local_player = entity.get_local_player()
+    local lx, ly, lz = entity.get_prop(local_player, "m_vecOrigin")
+    local players = entity.get_players(true)
+    if #players == 0 then 
+        return 0,0,0,0 
+    end
+    local close_idx
+    local closest_distance = math.huge
+    for i=1, #players do
+        local ent = players[i]
+        local x, y, z = entity.get_prop(ent, "m_vecOrigin")
+        local distance = get_distance(lx, ly, lz, x, y, z)
+        if distance <= closest_distance then
+            close_idx = ent
+            closest_distance = distance
+        end
+    end
+    local close_name = entity.get_player_name(close_idx)
+    local vec_vel = { entity.get_prop(close_idx, 'm_vecVelocity') }
+    local close_vel = math.floor(math.sqrt(vec_vel[1]^2 + vec_vel[2]^2) + 0.5)
+    local flags = entity.get_prop(close_idx, "m_fFlags")
+    local close_jump = bit.band(flags, 1) ~= 1
+    return close_idx , close_name , close_vel , close_jump
+end
+local function enemy_visible()
+    for _, idx in pairs(entity.get_players(true)) do
+        for i=0, 18 do
+            local x,y,z = entity.hitbox_position(idx,i)
+            if client.visible(x,y,z) then
+                return true
+            end
+        end
+    end
+    return false
+end
+local function refresh_ui()
+    
+    for i=1, #config_names do
+
+        local show = ui.get(active_wpn) == config_names[i]
+        ui.set(rage[i].enabled,true)
+        ui.set_visible(rage[i].enabled,false)
+        ui.set_visible(rage[i].target_selection, show)
+        ui.set_visible(rage[i].target_hitbox, show)
+        ui.set_visible(rage[i].avoid_move, show)
+        ui.set_visible(rage[i].avoid_jump, show)
+        ui.set_visible(rage[i].multipoint, show)
+        ui.set_visible(rage[i].multipoint_mode, show)
+        ui.set_visible(rage[i].multipoint_scale, show and #{ui.get(rage[i].multipoint)} > 0)
+        ui.set_visible(rage[i].prefer_safe_point, show)
+        ui.set_visible(rage[i].avoid_unsafe_hitbox, show)
+        
+        ui.set_visible(rage[i].extend, show)
+        local extend = ui.get(rage[i].extend)
+        --,"","","","",""
+        ui.set_visible(rage[i].hc_label, show)
+        ui.set_visible(rage[i].hitchance, show)
+
+        ui.set_visible(rage[i].hitchance_no_scope, show and contains(extend,"Minimum hitchance - No scope") )
+
+        ui.set_visible(rage[i].dmg_label, show)
+        ui.set_visible(rage[i].min_damage, show)
+
+        ui.set_visible(rage[i].min_damage_visible, show and contains(extend,"Minimum damage - visible") )
+        ui.set_visible(rage[i].min_damage_dormant, show and contains(extend,"Dormant damage") )
+        ui.set_visible(rage[i].min_damage_override_1, show and contains(extend,"Override damage - 1") )
+        ui.set_visible(rage[i].min_damage_override_2, show and contains(extend,"Override damage - 2") )
+        
+        ui.set_visible(rage[i].automatic_scope, show)
+        ui.set_visible(rage[i].accuracy_boost, show)
+        ui.set_visible(rage[i].delay_shot, show)
+        ui.set_visible(rage[i].quick_stop, show)
+        ui.set_visible(rage[i].quick_stop_options, show and ui.get(rage[i].quick_stop))
+        ui.set_visible(rage[i].noscope_quick_stop_options, show and contains(extend,"No scope quick stop") )
+        ui.set_visible(rage[i].prefer_baim, show)
+        ui.set_visible(rage[i].prefer_baim_disablers, show and ui.get(rage[i].prefer_baim))
+        ui.set_visible(rage[i].force_baim_peek, show)
+        ui.set_visible(rage[i].dt_extend, show)
+        
+    end
+    local aimbot_visible = contains(ui.get(debug_ui),"Aimbot") or false
+    local other_visible = contains(ui.get(debug_ui),"Other") or false
+    if close_ui then other_visible = true;aimbot_visible = true end
+--[[     ui.set_visible(ref_enable       ,aimbot_visible)
+    ui.set_visible(ref_enable_key  ,aimbot_visible) ]]
+    ui.set_visible(ref_target ,aimbot_visible)
+    ui.set_visible(ref_hitbox           ,aimbot_visible)
+    ui.set_visible(ref_multipoint       ,aimbot_visible)
+    ui.set_visible(ref_multipointkey    ,aimbot_visible)
+    ui.set_visible(ref_multipoint_mode  ,aimbot_visible)
+    ui.set_visible(ref_multipoint_scale ,aimbot_visible)
+    ui.set_visible(ref_prefer_safepoint ,aimbot_visible)
+    --[[ ui.set_visible(force_safe,aimbot_visible) ]] -- force safepoint key
+    ui.set_visible(ref_avoid_hitbox     ,aimbot_visible)
+    ui.set_visible(ref_automatic_fire   ,aimbot_visible)
+    ui.set_visible(ref_automatic_penetration    ,aimbot_visible)
+    ui.set_visible(ref_silent_aim       ,aimbot_visible)
+    ui.set_visible(ref_hitchance        ,aimbot_visible)
+    ui.set_visible(ref_mindamage        ,aimbot_visible)
+    ui.set_visible(ref_automatic_scope  ,aimbot_visible)
+    ui.set_visible(ref_reduce_aimstep   ,aimbot_visible)
+    ui.set_visible(ref_max_fov          ,aimbot_visible)
+    ui.set_visible(ref_log_spread       ,aimbot_visible)
+    ui.set_visible(ref_low_fps_mitigations  ,aimbot_visible)
+    -- set_visible rage - other
+    ui.set_visible(ref_remove_recoil    ,other_visible)
+    ui.set_visible(ref_accuracy_boost   ,other_visible)
+    ui.set_visible(ref_delay_shot       ,other_visible)
+    ui.set_visible(ref_quickstop        ,other_visible)
+    ui.set_visible(ref_quickstopkey     ,other_visible)
+    ui.set_visible(ref_quickstop_options,other_visible)
+--[[     ui.set_visible(ref_quick_peek,other_visible)
+    ui.set_visible(ref_quick_peek_key,other_visible)
+    ui.set_visible(ref_quick_peek_color,other_visible) ]]
+--[[     ui.set_visible(ref_antiaim_correction,other_visible)
+    ui.set_visible(ref_antiaim_correction_override,other_visible) -- resolver override key ]]
+    ui.set_visible(ref_prefer_bodyaim,other_visible)
+    ui.set_visible(ref_prefer_bodyaim_disablers,other_visible)
+    ui.set_visible(ref_force_baim_peek,other_visible)
+    --[[ ui.set_visible(force_baim,other_visible) ]] -- force baim key
+    --[[ ui.set_visible(fd_key,other_visible) ]] -- fake duck key
+    --[[ ui.set_visible(dt,other_visible) ]] -- dt 
+    --[[ ui.set_visible(dt_key,other_visible) ]] -- dt key
+--[[     ui.set_visible(dt_mode,other_visible)
+    ui.set_visible(dt_hit_chance,other_visible)
+    ui.set_visible(dt_speed,other_visible)
+    ui.set_visible(dt_stop,other_visible) ]]
+end
+local function set_damage(i,extend)
+    local dmg = 0
+    --"Minimum damage - visible",
+    dmg = ui.get(rage[i].min_damage)
+    if ui.get(override_dmg_2) and contains(extend,"Override damage - 2") then
+        dmg = ui.get(rage[i].min_damage_override_2)
+    elseif ui.get(override_dmg_1) and contains(extend,"Override damage - 1") then
+        dmg = ui.get(rage[i].min_damage_override_1)
+    elseif enemy_visible() and contains(extend,"Minimum damage - visible") then
+        dmg = ui.get(rage[i].min_damage_visible)
+    end
+    return dmg
+end
+local function set_config(idx)
+    local i = ui.get(rage[idx].enabled) and idx or 1
+    
+    local rage_hitboxes = ui.get(rage[i].target_hitbox)
+    if #rage_hitboxes == 0 then
+        ui.set(rage[i].target_hitbox, "Head")
+    end
+    local me = entity.get_local_player()
+    local scoped = entity.get_prop(me, 'm_bIsScoped') == 1
+    local close_idx , close_name , close_vel , close_jump = get_closest_player()
+    local avoid_target_move = ui.get(rage[i].avoid_move) and close_vel > 10
+    local avoid_target_jump = ui.get(rage[i].avoid_jump) and close_jump
+    
+    local s_target = ""
+    local s_hitbox = ""
+    local s_multi = ""
+    local s_multi_mode = ""
+    local s_multi_slider = 0
+    local s_avoid = ""
+    local s_hc = 0
+    local s_dmg = 0
+    local s_accuracy = ""
+    local s_quick_stop = ""
+    local s_prefer_body_aim = ""
+
+    local extend = ui.get(rage[i].extend)
+
+    if ui.get(dt) and ui.get(dt_key) and false then
+
+    else
+        s_dmg = set_damage(i,extend) or 0
+        s_hc = not scoped and contains(extend,"Minimum hitchance - No scope") and ui.get(rage[i].hitchance_no_scope) or ui.get(rage[i].hitchance)
+        s_quick_stop = not scoped and contains(extend,"No scope quick stop") and ui.get(rage[i].noscope_quick_stop_options) or ui.get(rage[i].quick_stop_options)
+    end
+
+    ui.set(ref_target,                  ui.get(rage[i].target_selection))
+    ui.set(ref_hitbox,                  ui.get(rage[i].target_hitbox))
+    ui.set(ref_multipoint,              ui.get(rage[i].multipoint))
+    ui.set(ref_multipoint_scale,        ui.get(rage[i].multipoint_scale))
+    ui.set(ref_multipoint_mode,         ui.get(rage[i].multipoint_mode))
+    ui.set(ref_prefer_safepoint,        ui.get(rage[i].prefer_safe_point))
+    ui.set(ref_avoid_hitbox,            ui.get(rage[i].avoid_unsafe_hitbox))
+
+    ui.set(ref_hitchance, s_hc)
+    ui.set(ref_dormant_damage,ui.get(ref_dormant_active) and contains(extend,"Dormant damage") and ui.get(rage[i].min_damage_dormant) or 15 ) 
+    ui.set(ref_mindamage, s_dmg)
+
+    ui.set(ref_automatic_scope, ui.get(rage[i].automatic_scope))
+    ui.set(ref_accuracy_boost, ui.get(rage[i].accuracy_boost))
+    ui.set(ref_delay_shot, ui.get(rage[i].delay_shot))
+    ui.set(ref_quickstop, ui.get(rage[i].quick_stop))
+
+    ui.set(ref_quickstop_options, s_quick_stop)
+
+    ui.set(ref_prefer_bodyaim, ui.get(rage[i].prefer_baim))
+    ui.set(ref_prefer_bodyaim_disablers, ui.get(rage[i].prefer_baim_disablers))
+    ui.set(ref_force_baim_peek, ui.get(rage[i].force_baim_peek))
+
+
+    ui.set(ref_remove_recoil, true)
+    ui.set(ref_automatic_fire, true)
+    ui.set(ref_automatic_penetration, true)
+    ui.set(ref_silent_aim, true)
+    active_idx = i
+end
+
+local function weapon_switch(c)
+    local plocal = entity.get_local_player()
+    local weapon = entity.get_player_weapon(plocal)
+    local weapon_id = bit.band(entity.get_prop(weapon, "m_iItemDefinitionIndex"), 0xFFFF)
+
+    local wpn_text = config_names[weapon_idx[weapon_id]]
+
+    if wpn_text ~= nil then
+        if last_weapon ~= weapon_id then
+            ui.set(active_wpn, ui.get(rage[weapon_idx[weapon_id]].enabled) and wpn_text or "Global")
+            last_weapon = weapon_id
+        end
+        set_config(weapon_idx[weapon_id])
+        local plocal = entity.get_local_player()
+    else
+        if last_weapon ~= weapon_id then
+            ui.set(active_wpn, "Global")
+            last_weapon = weapon_id
+        end
+        set_config(1)
+    end
+end
+
+local function run_visuals()
+    refresh_ui()
+
+    local x, y = client.screen_size()
+    renderer.text(x/2,y/2+5,255,255,255,255,"b",nil,"hc: "..ui.get(ref_hitchance))
+    renderer.text(x/2,y/2+15,255,255,255,255,"b",nil,"dmg: "..ui.get(ref_mindamage))
+end
+
+client.set_event_callback("setup_command", weapon_switch)
+client.set_event_callback("paint", run_visuals)
+client.set_event_callback("shutdown",function()
+    close_ui = true
+    refresh_ui()
+end)
